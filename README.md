@@ -1,13 +1,18 @@
 # TrackTab
 
-A tiny macOS menu-bar utility that maps Magic Trackpad taps to focused keyboard actions.
+A tiny macOS menu-bar utility that maps Magic Trackpad gestures to focused keyboard actions.
 
 ## Default behavior
 
-- **Three-finger tap** → sends **Command-W** when Google Chrome is frontmost, closing the current tab
-- **Four-finger tap** → sends a synthetic **Right Command tap** anywhere, intended to trigger a voice-input tool bound to a single Right Command press
-- The two gestures can be enabled or disabled independently from the menu bar
-- Rejects obvious swipes and long presses
+| Gesture | Action |
+|---|---|
+| **Three-finger tap** | Sends **Command-W** when Google Chrome is frontmost, closing the current tab |
+| **Three-finger swipe down** | Sends **Return** |
+| **Four-finger tap** | Sends a synthetic **Right Command tap** anywhere, intended to trigger a voice-input tool bound to a single Right Command press |
+| **Five-finger tap** | Sends **Left Command + Space** |
+
+- Each gesture can be enabled or disabled independently from the menu bar
+- Rejects obvious swipes and long presses where they'd conflict with a tap gesture, and vice versa
 - Optional **Launch at Login**
 - No network access and no analytics
 
@@ -18,6 +23,10 @@ The intended voice-input workflow is:
 3. Use the normal click/tap that your voice-input tool already uses to finish input.
 
 TrackTab only replaces the initial physical Right Command press; it does not take over the voice-input session itself.
+
+### Why these particular gestures
+
+Two-finger tap and two-finger double-tap were deliberately avoided: they're already claimed by macOS as, respectively, secondary click and (in apps like Safari) Smart Zoom, and TrackTab doesn't intercept or block the system's own handling of a gesture — it only listens and adds its own synthetic key press alongside. Overloading a single finger count with both a tap and a double-tap (e.g. "three-finger tap closes a tab, three-finger double-tap does something else") was tried and dropped for the same reason from the other direction: the two detectors share the same physical motion, so they ended up interfering with each other in practice. The three-finger swipe avoids all of this — it requires real, deliberate travel across the trackpad, which a tap never produces and a swipe always does, so the tap and swipe detectors on the same three fingers never fire off the same physical gesture.
 
 ## Requirements
 
@@ -45,11 +54,11 @@ On first launch, grant **System Settings → Privacy & Security → Accessibilit
 
 > Because the app is ad-hoc signed, rebuilding it can cause macOS to forget its Accessibility grant. If that happens, remove TrackTab from the Accessibility list and add it again.
 
-## How Right Command is simulated
+## How the modifier-key gestures are simulated
 
-Right Command is a modifier key, so TrackTab does not treat it like an ordinary character key. It emits `flagsChanged` events using Apple virtual key code `54` (`0x36`) together with the device-specific right-Command flag. The press is followed by an explicit release after a short interval so the Command modifier cannot remain logically held down.
+Right Command and Left Command are modifier keys, so TrackTab does not treat them like ordinary character keys. It emits `flagsChanged` events using Apple's virtual key codes (`54`/`0x36` for Right Command, `55`/`0x37` for Left Command) together with the device-specific flag bit for that side of the keyboard (`0x10` for right, `0x08` for left). Left Command + Space additionally sends a real Space key press while that flag is held, then releases both. Each press is followed by an explicit release shortly after so no modifier can remain logically stuck down, and TrackTab won't fire if it detects a real Command key already held (to avoid stomping on whatever the user is doing with it).
 
-This is designed to resemble a physical Right Command tap closely enough for tools that bind voice input to that key. A third-party app can still choose to ignore synthetic events, so this behavior should be verified with the specific voice-input tool in use.
+This is designed to resemble a physical key combination closely enough for tools that bind actions to it (e.g. a voice-input tool bound to a bare Right Command press). A third-party app can still choose to ignore synthetic events, so this behavior should be verified with the specific tool in use.
 
 ## Why a private framework?
 
@@ -59,18 +68,13 @@ The private framework is intentionally loaded with `dlopen` instead of linked at
 
 ## Safety against accidental triggers
 
-Each action has its own gesture detector:
+Each tap gesture has its own `GestureDetector`, and the swipe gesture has its own `SwipeDetector` — both in `TrackTabCore`. A tap detector tracks an exact finger count, requires the touch to stay nearly stationary, and cancels if extra fingers land partway through (so a three-finger tap that grows a fourth finger doesn't fire the close-tab action). A swipe detector requires the opposite: real travel across the trackpad, well past what a tap would ever produce, so a tap and a swipe sharing the same finger count can't both register from the same physical motion.
 
-- the Chrome action tracks exactly **three fingers**
-- the voice-input action tracks exactly **four fingers**
-
-A tap must finish within 0.45 seconds and keep the first touch within a small movement threshold. If a three-finger gesture grows to four fingers, the three-finger detector cancels that candidate rather than firing a close-tab action.
-
-The Chrome action also checks that Chrome is the frontmost application before sending Command-W. The four-finger Right Command action is intentionally application-independent.
+The Chrome action also checks that Chrome is the frontmost application before sending Command-W. The four- and five-finger actions are intentionally application-independent.
 
 ## Project layout
 
 - `MultitouchBridge`: minimal Objective-C bridge to the private trackpad framework
-- `TrackTabCore`: testable gesture state machine
-- `TrackTab`: menu-bar UI, gesture routing, Chrome check, Command-W, and Right Command event synthesis
+- `TrackTabCore`: testable gesture state machines (`GestureDetector` for taps, `SwipeDetector` for directional swipes)
+- `TrackTab`: menu-bar UI, gesture routing, Chrome check, and keyboard-event synthesis
 - `TrackTabCoreTests`: tap/swipe/long-press tests
