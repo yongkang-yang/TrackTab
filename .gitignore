@@ -1,0 +1,4 @@
+.build/
+.swiftpm/
+TrackTab.app/
+.DS_Store
