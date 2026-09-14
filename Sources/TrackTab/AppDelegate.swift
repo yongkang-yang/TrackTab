@@ -173,9 +173,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // device bit 0x10 identifies the right-side Command key specifically.
         let rightCommandKey: CGKeyCode = 54
         let rightCommandDeviceMask = CGEventFlags(rawValue: 0x00000010)
-        let pressedFlags = CGEventFlags(
+        let rightCommandFlags = CGEventFlags(
             rawValue: CGEventFlags.maskCommand.rawValue | rightCommandDeviceMask.rawValue
         )
+        let existingFlags = CGEventSource.flagsState(.hidSystemState)
+
+        // Do not disturb a real Command key that the user is already holding.
+        guard !existingFlags.contains(.maskCommand) else { return }
 
         guard let source = CGEventSource(stateID: .hidSystemState),
               let down = CGEvent(
@@ -192,9 +196,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         down.type = .flagsChanged
-        down.flags = pressedFlags
+        down.flags = existingFlags.union(rightCommandFlags)
         up.type = .flagsChanged
-        up.flags = []
+        up.flags = existingFlags
 
         down.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: 0.025)
