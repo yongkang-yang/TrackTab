@@ -7,25 +7,28 @@ import TrackTabCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let defaults = UserDefaults.standard
     private let stream = TTMultitouchStream()
-    private var detector = GestureDetector()
+    private var closeTabDetector = GestureDetector(
+        configuration: .init(fingerCount: 3)
+    )
+    private var voiceInputDetector = GestureDetector(
+        configuration: .init(fingerCount: 4)
+    )
     private var statusItem: NSStatusItem!
     private var enabledItem: NSMenuItem!
-    private var threeFingerItem: NSMenuItem!
-    private var fourFingerItem: NSMenuItem!
+    private var closeTabItem: NSMenuItem!
+    private var voiceInputItem: NSMenuItem!
     private var launchAtLoginItem: NSMenuItem!
     private var permissionItem: NSMenuItem!
     private var enabled = true
+    private var closeTabEnabled = true
+    private var voiceInputEnabled = true
     private var lastActionAt = Date.distantPast
-
-    private var fingerCount: Int {
-        let saved = defaults.integer(forKey: "fingerCount")
-        return saved == 4 ? 4 : 3
-    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         enabled = defaults.object(forKey: "enabled") as? Bool ?? true
-        detector.configuration.fingerCount = fingerCount
+        closeTabEnabled = defaults.object(forKey: "closeTabEnabled") as? Bool ?? true
+        voiceInputEnabled = defaults.object(forKey: "voiceInputEnabled") as? Bool ?? true
 
         setUpMenuBar()
         requestAccessibilityIfNeeded()
@@ -49,22 +52,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enabledItem.target = self
         menu.addItem(enabledItem)
 
-        let fingerMenuItem = NSMenuItem(title: "Tap gesture", action: nil, keyEquivalent: "")
-        let fingerMenu = NSMenu()
-        threeFingerItem = NSMenuItem(title: "Three-finger tap", action: #selector(useThreeFingers), keyEquivalent: "")
-        fourFingerItem = NSMenuItem(title: "Four-finger tap", action: #selector(useFourFingers), keyEquivalent: "")
-        threeFingerItem.target = self
-        fourFingerItem.target = self
-        fingerMenu.addItem(threeFingerItem)
-        fingerMenu.addItem(fourFingerItem)
-        fingerMenuItem.submenu = fingerMenu
-        menu.addItem(fingerMenuItem)
-
         menu.addItem(.separator())
 
-        let scopeItem = NSMenuItem(title: "Chrome only · action: ⌘W", action: nil, keyEquivalent: "")
-        scopeItem.isEnabled = false
-        menu.addItem(scopeItem)
+        closeTabItem = NSMenuItem(
+            title: "Three-finger tap: Close Chrome tab",
+            action: #selector(toggleCloseTabGesture),
+            keyEquivalent: ""
+        )
+        closeTabItem.target = self
+        menu.addItem(closeTabItem)
+
+        voiceInputItem = NSMenuItem(
+            title: "Four-finger tap: Voice input (Right Command)",
+            action: #selector(toggleVoiceInputGesture),
+            keyEquivalent: ""
+        )
+        voiceInputItem.target = self
+        menu.addItem(voiceInputItem)
+
+        menu.addItem(.separator())
 
         permissionItem = NSMenuItem(title: "Accessibility", action: #selector(openAccessibilitySettings), keyEquivalent: "")
         permissionItem.target = self
@@ -86,15 +92,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMultitouch() {
         stream.frameHandler = { [weak self] touchCount, firstTouchState, x, y, timestamp in
             guard let self else { return }
-            let fired = self.detector.ingest(
+
+            let closeTabFired = self.closeTabDetector.ingest(
                 touchCount: touchCount,
                 firstTouchState: firstTouchState,
                 x: x,
                 y: y,
                 timestamp: timestamp
             )
-            if fired {
-                self.handleTap()
+            let voiceInputFired = self.voiceInputDetector.ingest(
+                touchCount: touchCount,
+                firstTouchState: firstTouchState,
+                x: x,
+                y: y,
+                timestamp: timestamp
+            )
+
+            if closeTabFired {
+                self.handleCloseTabTap()
+            }
+            if voiceInputFired {
+                self.handleVoiceInputTap()
             }
         }
 
@@ -104,23 +122,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func handleTap() {
-        guard enabled else { return }
+    private func handleCloseTabTap() {
+        guard enabled, closeTabEnabled else { return }
         guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
         guard let frontmost = NSWorkspace.shared.frontmostApplication,
               let bundleID = frontmost.bundleIdentifier,
               bundleID.hasPrefix("com.google.Chrome") else {
             return
         }
-
-        guard AXIsProcessTrusted() else {
-            requestAccessibilityIfNeeded()
-            refreshMenuState()
-            return
-        }
+        guard ensureAccessibility() else { return }
 
         sendCommandW()
         lastActionAt = Date()
+    }
+
+    private func handleVoiceInputTap() {
+        guard enabled, voiceInputEnabled else { return }
+        guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
+        guard ensureAccessibility() else { return }
+
+        sendRightCommandTap()
+        lastActionAt = Date()
+    }
+
+    private func ensureAccessibility() -> Bool {
+        guard AXIsProcessTrusted() else {
+            requestAccessibilityIfNeeded()
+            refreshMenuState()
+            return false
+        }
+        return true
     }
 
     private func sendCommandW() {
@@ -136,6 +167,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         up.post(tap: .cghidEventTap)
     }
 
+    private func sendRightCommandTap() {
+        // Apple virtual key code 54 (0x36) is the right Command key.
+        // Modifier keys are represented as flagsChanged events. The low-order
+        // device bit 0x10 identifies the right-side Command key specifically.
+        let rightCommandKey: CGKeyCode = 54
+        let rightCommandDeviceMask = CGEventFlags(rawValue: 0x00000010)
+        let pressedFlags = CGEventFlags(
+            rawValue: CGEventFlags.maskCommand.rawValue | rightCommandDeviceMask.rawValue
+        )
+
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let down = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: rightCommandKey,
+                keyDown: true
+              ),
+              let up = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: rightCommandKey,
+                keyDown: false
+              ) else {
+            return
+        }
+
+        down.type = .flagsChanged
+        down.flags = pressedFlags
+        up.type = .flagsChanged
+        up.flags = []
+
+        down.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.025)
+        up.post(tap: .cghidEventTap)
+    }
+
     private func requestAccessibilityIfNeeded() {
         guard !AXIsProcessTrusted() else {
             refreshMenuState()
@@ -148,8 +213,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshMenuState() {
         enabledItem?.state = enabled ? .on : .off
-        threeFingerItem?.state = fingerCount == 3 ? .on : .off
-        fourFingerItem?.state = fingerCount == 4 ? .on : .off
+        closeTabItem?.state = closeTabEnabled ? .on : .off
+        voiceInputItem?.state = voiceInputEnabled ? .on : .off
         permissionItem?.title = AXIsProcessTrusted() ? "Accessibility: Granted" : "Accessibility: Required…"
 
         if #available(macOS 13.0, *) {
@@ -157,26 +222,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func setFingerCount(_ count: Int) {
-        defaults.set(count, forKey: "fingerCount")
-        detector.configuration.fingerCount = count
-        detector.reset()
-        refreshMenuState()
-    }
-
     @objc private func toggleEnabled() {
         enabled.toggle()
         defaults.set(enabled, forKey: "enabled")
-        detector.reset()
+        closeTabDetector.reset()
+        voiceInputDetector.reset()
         refreshMenuState()
     }
 
-    @objc private func useThreeFingers() {
-        setFingerCount(3)
+    @objc private func toggleCloseTabGesture() {
+        closeTabEnabled.toggle()
+        defaults.set(closeTabEnabled, forKey: "closeTabEnabled")
+        closeTabDetector.reset()
+        refreshMenuState()
     }
 
-    @objc private func useFourFingers() {
-        setFingerCount(4)
+    @objc private func toggleVoiceInputGesture() {
+        voiceInputEnabled.toggle()
+        defaults.set(voiceInputEnabled, forKey: "voiceInputEnabled")
+        voiceInputDetector.reset()
+        refreshMenuState()
     }
 
     @objc private func toggleLaunchAtLogin() {
