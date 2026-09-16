@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         closeTabItem = NSMenuItem(
-            title: "Three-finger tap: Close Chrome tab",
+            title: "Three-finger tap: Close window/tab (⌘W)",
             action: #selector(toggleCloseTabGesture),
             keyEquivalent: ""
         )
@@ -212,11 +212,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleCloseTabTap() {
         guard enabled, closeTabEnabled else { return }
         guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
-        guard let frontmost = NSWorkspace.shared.frontmostApplication,
-              let bundleID = frontmost.bundleIdentifier,
-              bundleID.hasPrefix("com.google.Chrome") else {
-            return
-        }
         guard ensureAccessibility() else { return }
 
         sendCommandW()

@@ -6,7 +6,7 @@ A tiny macOS menu-bar utility that maps Magic Trackpad gestures to focused keybo
 
 | Gesture | Action |
 |---|---|
-| **Three-finger tap** | Sends **Command-W** when Google Chrome is frontmost, closing the current tab |
+| **Three-finger tap** | Sends **Command-W** (close window/tab), application-independent |
 | **Three-finger swipe down** | Sends **Return** |
 | **Four-finger tap** | Sends a synthetic **Right Command tap** anywhere, intended to trigger a voice-input tool bound to a single Right Command press |
 | **Five-finger tap** | Sends **Left Command + Space** |
@@ -68,13 +68,13 @@ The private framework is intentionally loaded with `dlopen` instead of linked at
 
 ## Safety against accidental triggers
 
-Each tap gesture has its own `GestureDetector`, and the swipe gesture has its own `SwipeDetector` — both in `TrackTabCore`. A tap detector tracks an exact finger count, requires the touch to stay nearly stationary, and cancels if extra fingers land partway through (so a three-finger tap that grows a fourth finger doesn't fire the close-tab action). A swipe detector requires the opposite: real travel across the trackpad, well past what a tap would ever produce, so a tap and a swipe sharing the same finger count can't both register from the same physical motion.
+Each tap gesture has its own `GestureDetector`, and the swipe gesture has its own `SwipeDetector` — both in `TrackTabCore`. A tap detector tracks an exact finger count, requires the touch to stay nearly stationary, and cancels if extra fingers land partway through (so a three-finger tap that grows a fourth finger doesn't fire the close-window action). A swipe detector requires the opposite: real travel across the trackpad, well past what a tap would ever produce, so a tap and a swipe sharing the same finger count can't both register from the same physical motion.
 
-The Chrome action also checks that Chrome is the frontmost application before sending Command-W. The four- and five-finger actions are intentionally application-independent.
+All four gestures are application-independent — none of them check which app is frontmost before firing.
 
 ## Project layout
 
 - `MultitouchBridge`: minimal Objective-C bridge to the private trackpad framework
 - `TrackTabCore`: testable gesture state machines (`GestureDetector` for taps, `SwipeDetector` for directional swipes)
-- `TrackTab`: menu-bar UI, gesture routing, Chrome check, and keyboard-event synthesis
+- `TrackTab`: menu-bar UI, gesture routing, and keyboard-event synthesis
 - `TrackTabCoreTests`: tap/swipe/long-press tests
