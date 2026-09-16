@@ -7,12 +7,12 @@ import TrackTabCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let defaults = UserDefaults.standard
     private let stream = TTMultitouchStream()
-    private var closeTabDetector = GestureDetector(
+    private var enterTapDetector = GestureDetector(
         // Loosened the same way as the other tap gestures: a bit more
         // slack on timing/jitter, and don't cancel on a momentary
         // non-contact reading on the sampled touch. Movement tolerance
         // stays well under the swipe detector's minimum travel (0.08) so a
-        // real tap here still can't also register as the Enter swipe.
+        // real tap here still can't also register as the close-window swipe.
         configuration: .init(
             fingerCount: 3,
             maxTapDuration: 0.55,
@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requireContactWhileTracking: false
         )
     )
-    private var enterSwipeDetector = SwipeDetector(
+    private var closeWindowSwipeDetector = SwipeDetector(
         configuration: .init(fingerCount: 3, requireContactWhileTracking: false)
     )
     private var voiceInputDetector = GestureDetector(
@@ -52,14 +52,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var enabledItem: NSMenuItem!
     private var enterItem: NSMenuItem!
-    private var closeTabItem: NSMenuItem!
+    private var closeWindowItem: NSMenuItem!
     private var voiceInputItem: NSMenuItem!
     private var spotlightItem: NSMenuItem!
     private var launchAtLoginItem: NSMenuItem!
     private var permissionItem: NSMenuItem!
     private var enabled = true
     private var enterEnabled = true
-    private var closeTabEnabled = true
+    private var closeWindowEnabled = true
     private var voiceInputEnabled = true
     private var spotlightEnabled = true
     private var lastActionAt = Date.distantPast
@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         enabled = defaults.object(forKey: "enabled") as? Bool ?? true
         enterEnabled = defaults.object(forKey: "enterEnabled") as? Bool ?? true
-        closeTabEnabled = defaults.object(forKey: "closeTabEnabled") as? Bool ?? true
+        closeWindowEnabled = defaults.object(forKey: "closeWindowEnabled") as? Bool ?? true
         voiceInputEnabled = defaults.object(forKey: "voiceInputEnabled") as? Bool ?? true
         spotlightEnabled = defaults.object(forKey: "spotlightEnabled") as? Bool ?? true
 
@@ -96,21 +96,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        closeTabItem = NSMenuItem(
-            title: "Three-finger tap: Close window/tab (⌘W)",
-            action: #selector(toggleCloseTabGesture),
-            keyEquivalent: ""
-        )
-        closeTabItem.target = self
-        menu.addItem(closeTabItem)
-
         enterItem = NSMenuItem(
-            title: "Three-finger swipe down: Enter",
+            title: "Three-finger tap: Enter",
             action: #selector(toggleEnterGesture),
             keyEquivalent: ""
         )
         enterItem.target = self
         menu.addItem(enterItem)
+
+        closeWindowItem = NSMenuItem(
+            title: "Three-finger swipe down: Close window (⌘W)",
+            action: #selector(toggleCloseWindowGesture),
+            keyEquivalent: ""
+        )
+        closeWindowItem.target = self
+        menu.addItem(closeWindowItem)
 
         voiceInputItem = NSMenuItem(
             title: "Four-finger tap: Voice input (Right Command)",
@@ -151,14 +151,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stream.frameHandler = { [weak self] touchCount, firstTouchState, x, y, timestamp in
             guard let self else { return }
 
-            let closeTabFired = self.closeTabDetector.ingest(
+            let enterTapFired = self.enterTapDetector.ingest(
                 touchCount: touchCount,
                 firstTouchState: firstTouchState,
                 x: x,
                 y: y,
                 timestamp: timestamp
             )
-            let enterSwipeDirection = self.enterSwipeDetector.ingest(
+            let closeWindowSwipeDirection = self.closeWindowSwipeDetector.ingest(
                 touchCount: touchCount,
                 firstTouchState: firstTouchState,
                 x: x,
@@ -180,11 +180,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 timestamp: timestamp
             )
 
-            if closeTabFired {
-                self.handleCloseTabTap()
+            if enterTapFired {
+                self.handleEnterTap()
             }
-            if enterSwipeDirection == .down {
-                self.handleEnterSwipe()
+            if closeWindowSwipeDirection == .down {
+                self.handleCloseWindowSwipe()
             }
             if voiceInputFired {
                 self.handleVoiceInputTap()
@@ -200,7 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func handleEnterSwipe() {
+    private func handleEnterTap() {
         guard enabled, enterEnabled else { return }
         guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
         guard ensureAccessibility() else { return }
@@ -209,8 +209,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastActionAt = Date()
     }
 
-    private func handleCloseTabTap() {
-        guard enabled, closeTabEnabled else { return }
+    private func handleCloseWindowSwipe() {
+        guard enabled, closeWindowEnabled else { return }
         guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
         guard ensureAccessibility() else { return }
 
@@ -372,7 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshMenuState() {
         enabledItem?.state = enabled ? .on : .off
         enterItem?.state = enterEnabled ? .on : .off
-        closeTabItem?.state = closeTabEnabled ? .on : .off
+        closeWindowItem?.state = closeWindowEnabled ? .on : .off
         voiceInputItem?.state = voiceInputEnabled ? .on : .off
         spotlightItem?.state = spotlightEnabled ? .on : .off
         permissionItem?.title = AXIsProcessTrusted() ? "Accessibility: Granted" : "Accessibility: Required…"
@@ -385,8 +385,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleEnabled() {
         enabled.toggle()
         defaults.set(enabled, forKey: "enabled")
-        closeTabDetector.reset()
-        enterSwipeDetector.reset()
+        enterTapDetector.reset()
+        closeWindowSwipeDetector.reset()
         voiceInputDetector.reset()
         spotlightDetector.reset()
         refreshMenuState()
@@ -395,14 +395,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleEnterGesture() {
         enterEnabled.toggle()
         defaults.set(enterEnabled, forKey: "enterEnabled")
-        enterSwipeDetector.reset()
+        enterTapDetector.reset()
         refreshMenuState()
     }
 
-    @objc private func toggleCloseTabGesture() {
-        closeTabEnabled.toggle()
-        defaults.set(closeTabEnabled, forKey: "closeTabEnabled")
-        closeTabDetector.reset()
+    @objc private func toggleCloseWindowGesture() {
+        closeWindowEnabled.toggle()
+        defaults.set(closeWindowEnabled, forKey: "closeWindowEnabled")
+        closeWindowSwipeDetector.reset()
         refreshMenuState()
     }
 
