@@ -21,7 +21,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     )
     private var closeWindowSwipeDetector = SwipeDetector(
-        configuration: .init(fingerCount: 3, requireContactWhileTracking: false)
+        // overshootTolerance explicitly 0 (SwipeDetector's own default is
+        // 1): this swipe shares its finger count with a real, distinct
+        // 4-finger gesture (voice input), so it must not tolerate the
+        // touch count reaching 4 the way an unshared finger count could.
+        // Without this, a real 4-finger tap that drifts slightly while
+        // held (natural over its ~0.5s duration) can pass through
+        // touchCount 3 on lift-off and get misread as this swipe.
+        configuration: .init(fingerCount: 3, overshootTolerance: 0, requireContactWhileTracking: false)
     )
     private var voiceInputDetector = GestureDetector(
         // Same loosening as the 3-finger tap: more slack on timing/jitter,
