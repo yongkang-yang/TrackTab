@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var enabledItem: NSMenuItem!
     private var enterItem: NSMenuItem!
     private var closeWindowItem: NSMenuItem!
+    private var newTabItem: NSMenuItem!
     private var undoItem: NSMenuItem!
     private var redoItem: NSMenuItem!
     private var voiceInputItem: NSMenuItem!
@@ -24,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var enabled = true
     private var enterEnabled = true
     private var closeWindowEnabled = true
+    private var newTabEnabled = true
     private var undoEnabled = true
     private var redoEnabled = true
     private var voiceInputEnabled = true
@@ -35,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enabled = defaults.object(forKey: "enabled") as? Bool ?? true
         enterEnabled = defaults.object(forKey: "enterEnabled") as? Bool ?? true
         closeWindowEnabled = defaults.object(forKey: "closeWindowEnabled") as? Bool ?? true
+        newTabEnabled = defaults.object(forKey: "newTabEnabled") as? Bool ?? true
         undoEnabled = defaults.object(forKey: "undoEnabled") as? Bool ?? true
         redoEnabled = defaults.object(forKey: "redoEnabled") as? Bool ?? true
         voiceInputEnabled = defaults.object(forKey: "voiceInputEnabled") as? Bool ?? true
@@ -79,6 +82,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         closeWindowItem.target = self
         menu.addItem(closeWindowItem)
+
+        newTabItem = NSMenuItem(
+            title: "Three-finger swipe up: New tab (⌘T)",
+            action: #selector(toggleNewTabGesture),
+            keyEquivalent: ""
+        )
+        newTabItem.target = self
+        menu.addItem(newTabItem)
 
         undoItem = NSMenuItem(
             title: "Three-finger swipe left: Undo (⌘Z)",
@@ -170,11 +181,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch threeFingerSwipeDirection {
             case .down:
                 self.handleCloseWindowSwipe()
+            case .up:
+                self.handleNewTabSwipe()
             case .left:
                 self.handleUndoSwipe()
             case .right:
                 self.handleRedoSwipe()
-            default:
+            case nil:
                 break
             }
             if voiceInputFired {
@@ -206,6 +219,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard ensureAccessibility() else { return }
 
         sendCommandKey(13)
+        lastActionAt = Date()
+    }
+
+    private func handleNewTabSwipe() {
+        guard enabled, newTabEnabled else { return }
+        guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
+        guard ensureAccessibility() else { return }
+
+        sendCommandKey(17)
         lastActionAt = Date()
     }
 
@@ -266,7 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func sendCommandKey(_ keyCode: CGKeyCode, extraFlags: CGEventFlags = []) {
-        // Hardware key codes on Apple ANSI keyboards: 13 is W, 6 is Z.
+        // Hardware key codes on Apple ANSI keyboards: 13 is W, 17 is T, 6 is Z.
         guard let source = CGEventSource(stateID: .hidSystemState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
@@ -383,6 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enabledItem?.state = enabled ? .on : .off
         enterItem?.state = enterEnabled ? .on : .off
         closeWindowItem?.state = closeWindowEnabled ? .on : .off
+        newTabItem?.state = newTabEnabled ? .on : .off
         undoItem?.state = undoEnabled ? .on : .off
         redoItem?.state = redoEnabled ? .on : .off
         voiceInputItem?.state = voiceInputEnabled ? .on : .off
@@ -415,6 +438,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         closeWindowEnabled.toggle()
         defaults.set(closeWindowEnabled, forKey: "closeWindowEnabled")
         threeFingerSwipeDetector.reset()
+        refreshMenuState()
+    }
+
+    @objc private func toggleNewTabGesture() {
+        newTabEnabled.toggle()
+        defaults.set(newTabEnabled, forKey: "newTabEnabled")
         refreshMenuState()
     }
 

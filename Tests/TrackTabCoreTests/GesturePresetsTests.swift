@@ -7,7 +7,7 @@ import XCTest
 /// per-detector tests can't see.
 final class GesturePresetsTests: XCTestCase {
     private enum Action: Equatable {
-        case enter, closeWindow, undo, redo, voiceInput, spotlight
+        case enter, closeWindow, newTab, undo, redo, voiceInput, spotlight
     }
 
     /// (touchCount, firstTouchState, x, y, timestamp)
@@ -25,9 +25,10 @@ final class GesturePresetsTests: XCTestCase {
             }
             switch swipe3.ingest(touchCount: n, firstTouchState: state, x: x, y: y, timestamp: t) {
             case .down: fired.append(.closeWindow)
+            case .up: fired.append(.newTab)
             case .left: fired.append(.undo)
             case .right: fired.append(.redo)
-            case .up, nil: break
+            case nil: break
             }
             if tap4.ingest(touchCount: n, firstTouchState: state, x: x, y: y, timestamp: t) {
                 fired.append(.voiceInput)
@@ -72,13 +73,9 @@ final class GesturePresetsTests: XCTestCase {
 
     func testThreeFingerSwipeDirectionsMapToTheirActions() {
         XCTAssertEqual(actions(for: threeFingerSwipe(dx: 0, dy: -0.25)), [.closeWindow])
+        XCTAssertEqual(actions(for: threeFingerSwipe(dx: 0, dy: 0.25)), [.newTab])
         XCTAssertEqual(actions(for: threeFingerSwipe(dx: -0.25, dy: 0)), [.undo])
         XCTAssertEqual(actions(for: threeFingerSwipe(dx: 0.25, dy: 0)), [.redo])
-    }
-
-    func testThreeFingerSwipeUpDoesNothing() {
-        // Left to macOS (Mission Control).
-        XCTAssertEqual(actions(for: threeFingerSwipe(dx: 0, dy: 0.25)), [])
     }
 
     func testFourFingerTapIsVoiceInputOnly() {
@@ -114,6 +111,30 @@ final class GesturePresetsTests: XCTestCase {
             (2, 5, 0.50, 0.50, 1.36),
             (0, -1, 0, 0, 1.38),
         ]), [.voiceInput])
+    }
+
+    func testFourFingerSwipeUpDoesNotOpenNewTab() {
+        // Four-finger swipe up belongs to macOS (Mission Control). Lifting
+        // off passes back through three fingers, which must not complete a
+        // three-finger swipe up. Covers both landing all four at once and
+        // three landing a beat before the fourth.
+        XCTAssertEqual(actions(for: [
+            (4, 4, 0.50, 0.40, 1.00),
+            (4, 4, 0.50, 0.55, 1.06),
+            (4, 4, 0.50, 0.70, 1.12),
+            (3, 5, 0.50, 0.72, 1.14),
+            (2, 5, 0.50, 0.73, 1.15),
+            (0, -1, 0, 0, 1.17),
+        ]), [])
+        XCTAssertEqual(actions(for: [
+            (3, 4, 0.50, 0.40, 1.00),
+            (4, 4, 0.50, 0.42, 1.02),
+            (4, 4, 0.50, 0.60, 1.08),
+            (4, 4, 0.50, 0.75, 1.14),
+            (3, 5, 0.50, 0.77, 1.16),
+            (2, 5, 0.50, 0.78, 1.17),
+            (0, -1, 0, 0, 1.19),
+        ]), [])
     }
 
     func testTouchGrowingFromThreeToFourFingersIsVoiceInputOnly() {

@@ -8,6 +8,7 @@ A tiny macOS menu-bar utility that maps Magic Trackpad gestures to focused keybo
 |---|---|
 | **Three-finger tap** | Sends **Return** |
 | **Three-finger swipe down** | Sends **Command-W** (close window/tab), application-independent |
+| **Three-finger swipe up** | Sends **Command-T** (new tab) |
 | **Three-finger swipe left** | Sends **Command-Z** (undo) |
 | **Three-finger swipe right** | Sends **Shift-Command-Z** (redo) |
 | **Four-finger tap** | Sends a synthetic **Right Command tap** anywhere, intended to trigger a voice-input tool bound to a single Right Command press |
@@ -66,9 +67,8 @@ TrackTab only listens to the trackpad; it never blocks macOS's own gesture handl
 | Three-finger swipe left / right (undo / redo) | **More Gestures → Swipe between full-screen applications** | **Swipe left or right with four fingers**, or Off |
 | Three-finger swipe left / right (undo / redo) | **More Gestures → Swipe between pages** | **Scroll left or right with two fingers**, or Off. Don't pick either option that includes three fingers |
 | Three-finger swipe down (close window) | **More Gestures → App Exposé** | Off, or **Swipe down with four fingers** |
+| Three-finger swipe up (new tab) | **More Gestures → Mission Control** | **Swipe up with four fingers**, or Off |
 | Three-finger tap (Enter) | **Point & Click → Look up & data detectors** | Anything other than **Tap with three fingers** |
-
-**Mission Control** (swipe up) can stay on three fingers, because TrackTab doesn't use a three-finger swipe up.
 
 ## How the modifier-key gestures are simulated
 
