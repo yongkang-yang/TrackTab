@@ -49,7 +49,14 @@ public struct SwipeDetector: Sendable {
 
     private enum Phase: Sendable {
         case idle
-        case tracking(startTime: TimeInterval, startX: Double, startY: Double, cancelled: Bool)
+        case tracking(
+            startTime: TimeInterval,
+            startX: Double,
+            startY: Double,
+            lastX: Double,
+            lastY: Double,
+            cancelled: Bool
+        )
         case cooldown
     }
 
@@ -85,10 +92,10 @@ public struct SwipeDetector: Sendable {
             guard touchCount >= fingers, isPhysicalContact else {
                 return nil
             }
-            phase = .tracking(startTime: timestamp, startX: x, startY: y, cancelled: false)
+            phase = .tracking(startTime: timestamp, startX: x, startY: y, lastX: x, lastY: y, cancelled: false)
             return nil
 
-        case let .tracking(startTime, startX, startY, alreadyCancelled):
+        case let .tracking(startTime, startX, startY, lastX, lastY, alreadyCancelled):
             var cancelled = alreadyCancelled
             let elapsed = timestamp - startTime
 
@@ -101,7 +108,14 @@ public struct SwipeDetector: Sendable {
             }
 
             if touchCount >= fingers {
-                phase = .tracking(startTime: startTime, startX: startX, startY: startY, cancelled: cancelled)
+                phase = .tracking(
+                    startTime: startTime,
+                    startX: startX,
+                    startY: startY,
+                    lastX: x,
+                    lastY: y,
+                    cancelled: cancelled
+                )
                 return nil
             }
 
@@ -109,8 +123,14 @@ public struct SwipeDetector: Sendable {
             phase = .cooldown
             guard !cancelled else { return nil }
 
-            let dx = x - startX
-            let dy = y - startY
+            // Measure to the last frame where all fingers were still down,
+            // not to this release frame: once a finger lifts, the "first"
+            // touch MultitouchSupport reports can switch to a different
+            // physical finger, so this frame's position can be off by a
+            // finger's width sideways and misread a straight swipe as a
+            // diagonal.
+            let dx = lastX - startX
+            let dy = lastY - startY
             guard hypot(dx, dy) >= configuration.minDistance else { return nil }
             if abs(dy) >= abs(dx) * configuration.directionBias {
                 return dy < 0 ? .down : .up

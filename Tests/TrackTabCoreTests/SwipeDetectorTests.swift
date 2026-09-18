@@ -26,6 +26,19 @@ final class SwipeDetectorTests: XCTestCase {
         XCTAssertEqual(left.ingest(touchCount: 2, firstTouchState: 5, x: 0.3, y: 0.47, timestamp: 1.12), .left)
     }
 
+    func testReleaseFrameFingerSwitchDoesNotSkewDirection() {
+        // Recorded from a real straight-down swipe that was being rejected:
+        // on the frame where a finger lifts, the reported "first" touch
+        // switched to a different finger, making the release position look
+        // ~37° off vertical. Direction must come from the last frame where
+        // all three fingers were still down (~8° off vertical).
+        var detector = SwipeDetector(configuration: .init(fingerCount: 3, directionBias: 2.0, overshootTolerance: 0))
+        XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.500, y: 0.700, timestamp: 1.000))
+        XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.520, y: 0.580, timestamp: 1.080))
+        XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.535, y: 0.449, timestamp: 1.165))
+        XCTAssertEqual(detector.ingest(touchCount: 2, firstTouchState: 5, x: 0.612, y: 0.550, timestamp: 1.180), .down)
+    }
+
     func testDiagonalSwipeReportsNothing() {
         var detector = SwipeDetector(configuration: .init(fingerCount: 3, directionBias: 2.0))
         XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.6, y: 0.7, timestamp: 1.00))
