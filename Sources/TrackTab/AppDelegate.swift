@@ -7,64 +7,10 @@ import TrackTabCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let defaults = UserDefaults.standard
     private let stream = TTMultitouchStream()
-    private var enterTapDetector = GestureDetector(
-        // Loosened the same way as the other tap gestures: a bit more
-        // slack on timing/jitter, and don't cancel on a momentary
-        // non-contact reading on the sampled touch. Movement tolerance
-        // stays well under the swipe detector's minimum travel (0.08) so a
-        // real tap here still can't also register as the close-window swipe.
-        configuration: .init(
-            fingerCount: 3,
-            maxTapDuration: 0.55,
-            movementTolerance: 0.05,
-            requireContactWhileTracking: false
-        )
-    )
-    private var threeFingerSwipeDetector = SwipeDetector(
-        // overshootTolerance explicitly 0 (SwipeDetector's own default is
-        // 1): this swipe shares its finger count with a real, distinct
-        // 4-finger gesture (voice input), so it must not tolerate the
-        // touch count reaching 4 the way an unshared finger count could.
-        // Without this, a real 4-finger tap that drifts slightly while
-        // held (natural over its ~0.5s duration) can pass through
-        // touchCount 3 on lift-off and get misread as this swipe.
-        // directionBias raised from the type's default (1.2, which accepts
-        // up to ~40° off an axis) to 2.0 (~27°) so a clearly diagonal swipe
-        // doesn't count as down/left. 3.0 (~18°) was tried and rejected too
-        // many real, slightly imperfect swipes.
-        configuration: .init(
-            fingerCount: 3,
-            directionBias: 2.0,
-            overshootTolerance: 0,
-            requireContactWhileTracking: false
-        )
-    )
-    private var voiceInputDetector = GestureDetector(
-        // Same loosening as the 3-finger tap: more slack on timing/jitter,
-        // and don't cancel on a momentary non-contact reading. Overshoot
-        // tolerance stays at 0 (the default) so a brief 5th-finger graze
-        // still cancels this one instead of also arming the spotlight
-        // gesture at the same time.
-        configuration: .init(
-            fingerCount: 4,
-            maxTapDuration: 0.55,
-            movementTolerance: 0.05,
-            requireContactWhileTracking: false
-        )
-    )
-    private var spotlightDetector = GestureDetector(
-        // 5 is the hardware ceiling (fingerCount is capped at 5), so unlike
-        // the 3/4-finger gestures there's no room above it to land on by
-        // overshooting — all five fingers have to be read as touching in
-        // the same frame, which happens less reliably than landing on a
-        // lower count. Give it more slack on timing and jitter to compensate.
-        configuration: .init(
-            fingerCount: 5,
-            maxTapDuration: 0.7,
-            movementTolerance: 0.08,
-            requireContactWhileTracking: false
-        )
-    )
+    private var enterTapDetector = GestureDetector(configuration: GesturePresets.threeFingerTap)
+    private var threeFingerSwipeDetector = SwipeDetector(configuration: GesturePresets.threeFingerSwipe)
+    private var voiceInputDetector = GestureDetector(configuration: GesturePresets.fourFingerTap)
+    private var spotlightDetector = GestureDetector(configuration: GesturePresets.fiveFingerTap)
     private var statusItem: NSStatusItem!
     private var enabledItem: NSMenuItem!
     private var enterItem: NSMenuItem!

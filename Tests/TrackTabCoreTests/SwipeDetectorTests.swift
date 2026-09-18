@@ -23,6 +23,7 @@ final class SwipeDetectorTests: XCTestCase {
 
         var left = SwipeDetector(configuration: .init(fingerCount: 3))
         XCTAssertNil(left.ingest(touchCount: 3, firstTouchState: 4, x: 0.6, y: 0.5, timestamp: 1.00))
+        XCTAssertNil(left.ingest(touchCount: 3, firstTouchState: 4, x: 0.3, y: 0.47, timestamp: 1.10))
         XCTAssertEqual(left.ingest(touchCount: 2, firstTouchState: 5, x: 0.3, y: 0.47, timestamp: 1.12), .left)
     }
 
@@ -42,7 +43,9 @@ final class SwipeDetectorTests: XCTestCase {
     func testDiagonalSwipeReportsNothing() {
         var detector = SwipeDetector(configuration: .init(fingerCount: 3, directionBias: 2.0))
         XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.6, y: 0.7, timestamp: 1.00))
-        // 45°: neither axis dominates by 2x.
+        // 45°: neither axis dominates by 2x. (The travel is well past the
+        // minimum distance, so a nil here really is the angle check.)
+        XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.4, y: 0.5, timestamp: 1.10))
         XCTAssertNil(detector.ingest(touchCount: 2, firstTouchState: 5, x: 0.4, y: 0.5, timestamp: 1.12))
     }
 

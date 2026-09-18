@@ -92,7 +92,16 @@ public struct SwipeDetector: Sendable {
             guard touchCount >= fingers, isPhysicalContact else {
                 return nil
             }
-            phase = .tracking(startTime: timestamp, startX: x, startY: y, lastX: x, lastY: y, cancelled: false)
+            // Too many fingers on the very first frame counts as cancelled,
+            // same as GestureDetector.
+            phase = .tracking(
+                startTime: timestamp,
+                startX: x,
+                startY: y,
+                lastX: x,
+                lastY: y,
+                cancelled: touchCount > fingers + configuration.overshootTolerance
+            )
             return nil
 
         case let .tracking(startTime, startX, startY, lastX, lastY, alreadyCancelled):

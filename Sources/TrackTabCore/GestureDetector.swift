@@ -70,12 +70,16 @@ public struct GestureDetector: Sendable {
             guard touchCount >= fingers, isPhysicalContact else {
                 return false
             }
+            // Already past the overshoot limit on the very first frame
+            // counts as cancelled too; otherwise a touch that lands with
+            // too many fingers and only shows that count for one frame
+            // would look like a clean tap once it drops back down.
             phase = .tracking(
                 startTime: timestamp,
                 refX: x,
                 refY: y,
                 lastTouchCount: touchCount,
-                cancelled: false
+                cancelled: touchCount > fingers + configuration.overshootTolerance
             )
             return false
 

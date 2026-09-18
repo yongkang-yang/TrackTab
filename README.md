@@ -86,11 +86,11 @@ The private framework is intentionally loaded with `dlopen` instead of linked at
 
 Each tap gesture has its own `GestureDetector`, and the swipe gesture has its own `SwipeDetector` — both in `TrackTabCore`. A tap detector tracks an exact finger count, requires the touch to stay nearly stationary, and cancels if extra fingers land partway through (so a three-finger tap that grows a fourth finger doesn't fire the Enter action). A swipe detector requires the opposite: real travel across the trackpad, well past what a tap would ever produce, so a tap and a swipe sharing the same finger count can't both register from the same physical motion.
 
-All four gestures are application-independent — none of them check which app is frontmost before firing.
+All gestures are application-independent — none of them check which app is frontmost before firing.
 
 ## Project layout
 
 - `MultitouchBridge`: minimal Objective-C bridge to the private trackpad framework
-- `TrackTabCore`: testable gesture state machines (`GestureDetector` for taps, `SwipeDetector` for directional swipes)
+- `TrackTabCore`: testable gesture state machines (`GestureDetector` for taps, `SwipeDetector` for directional swipes), plus `GesturePresets`, the exact detector settings the app ships with
 - `TrackTab`: menu-bar UI, gesture routing, and keyboard-event synthesis
-- `TrackTabCoreTests`: tap/swipe/long-press tests
+- `TrackTabCoreTests`: per-detector tests, plus `GesturePresetsTests`, which runs the shipped settings side by side on the same touch frames to check each gesture fires exactly its own action
