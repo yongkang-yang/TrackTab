@@ -15,11 +15,22 @@ final class SwipeDetectorTests: XCTestCase {
         XCTAssertNil(detector.ingest(touchCount: 2, firstTouchState: 5, x: 0.5, y: 0.5, timestamp: 1.05))
     }
 
-    func testMostlyHorizontalDragDoesNotCountAsVertical() {
-        var detector = SwipeDetector(configuration: .init(fingerCount: 3))
-        XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.2, y: 0.5, timestamp: 1.00))
-        XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.6, y: 0.52, timestamp: 1.10))
-        XCTAssertNil(detector.ingest(touchCount: 2, firstTouchState: 5, x: 0.6, y: 0.52, timestamp: 1.18))
+    func testHorizontalSwipesReportLeftAndRight() {
+        var right = SwipeDetector(configuration: .init(fingerCount: 3))
+        XCTAssertNil(right.ingest(touchCount: 3, firstTouchState: 4, x: 0.2, y: 0.5, timestamp: 1.00))
+        XCTAssertNil(right.ingest(touchCount: 3, firstTouchState: 4, x: 0.6, y: 0.52, timestamp: 1.10))
+        XCTAssertEqual(right.ingest(touchCount: 2, firstTouchState: 5, x: 0.6, y: 0.52, timestamp: 1.18), .right)
+
+        var left = SwipeDetector(configuration: .init(fingerCount: 3))
+        XCTAssertNil(left.ingest(touchCount: 3, firstTouchState: 4, x: 0.6, y: 0.5, timestamp: 1.00))
+        XCTAssertEqual(left.ingest(touchCount: 2, firstTouchState: 5, x: 0.3, y: 0.47, timestamp: 1.12), .left)
+    }
+
+    func testDiagonalSwipeReportsNothing() {
+        var detector = SwipeDetector(configuration: .init(fingerCount: 3, directionBias: 2.0))
+        XCTAssertNil(detector.ingest(touchCount: 3, firstTouchState: 4, x: 0.6, y: 0.7, timestamp: 1.00))
+        // 45°: neither axis dominates by 2x.
+        XCTAssertNil(detector.ingest(touchCount: 2, firstTouchState: 5, x: 0.4, y: 0.5, timestamp: 1.12))
     }
 
     func testLongPressDoesNotFire() {

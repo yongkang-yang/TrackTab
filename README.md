@@ -8,9 +8,12 @@ A tiny macOS menu-bar utility that maps Magic Trackpad gestures to focused keybo
 |---|---|
 | **Three-finger tap** | Sends **Return** |
 | **Three-finger swipe down** | Sends **Command-W** (close window/tab), application-independent |
+| **Three-finger swipe left** | Sends **Command-Z** (undo) |
+| **Three-finger swipe right** | Sends **Shift-Command-Z** (redo) |
 | **Four-finger tap** | Sends a synthetic **Right Command tap** anywhere, intended to trigger a voice-input tool bound to a single Right Command press |
 | **Five-finger tap** | Sends **Left Command + Space** |
 
+- The three-finger gestures need a few macOS trackpad settings changed first so the system doesn't also react to them. See [Required trackpad settings](#required-trackpad-settings)
 - Each gesture can be enabled or disabled independently from the menu bar
 - Rejects obvious swipes and long presses where they'd conflict with a tap gesture, and vice versa
 - Optional **Launch at Login**
@@ -53,6 +56,19 @@ open /Applications/TrackTab.app
 On first launch, grant **System Settings → Privacy & Security → Accessibility → TrackTab**.
 
 > Because the app is ad-hoc signed, rebuilding it can cause macOS to forget its Accessibility grant. If that happens, remove TrackTab from the Accessibility list and add it again.
+
+## Required trackpad settings
+
+TrackTab only listens to the trackpad; it never blocks macOS's own gesture handling. If a system gesture is bound to the same motion, both fire at once. For example, a three-finger swipe left would undo and also switch desktops. So you need to free up the three-finger gestures TrackTab uses in **System Settings → Trackpad**:
+
+| TrackTab gesture | System setting to change | Change it to |
+|---|---|---|
+| Three-finger swipe left / right (undo / redo) | **More Gestures → Swipe between full-screen applications** | **Swipe left or right with four fingers**, or Off |
+| Three-finger swipe left / right (undo / redo) | **More Gestures → Swipe between pages** | **Scroll left or right with two fingers**, or Off. Don't pick either option that includes three fingers |
+| Three-finger swipe down (close window) | **More Gestures → App Exposé** | Off, or **Swipe down with four fingers** |
+| Three-finger tap (Enter) | **Point & Click → Look up & data detectors** | Anything other than **Tap with three fingers** |
+
+**Mission Control** (swipe up) can stay on three fingers, because TrackTab doesn't use a three-finger swipe up.
 
 ## How the modifier-key gestures are simulated
 

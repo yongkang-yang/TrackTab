@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requireContactWhileTracking: false
         )
     )
-    private var closeWindowSwipeDetector = SwipeDetector(
+    private var threeFingerSwipeDetector = SwipeDetector(
         // overshootTolerance explicitly 0 (SwipeDetector's own default is
         // 1): this swipe shares its finger count with a real, distinct
         // 4-finger gesture (voice input), so it must not tolerate the
@@ -29,9 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // held (natural over its ~0.5s duration) can pass through
         // touchCount 3 on lift-off and get misread as this swipe.
         // directionBias raised from the type's default (1.2, which accepts
-        // up to ~40° off straight-down) to 2.0 (~27°) so a clearly diagonal
-        // swipe doesn't count as "down". 3.0 (~18°) was tried and rejected
-        // too many real, slightly imperfect downward swipes.
+        // up to ~40° off an axis) to 2.0 (~27°) so a clearly diagonal swipe
+        // doesn't count as down/left. 3.0 (~18°) was tried and rejected too
+        // many real, slightly imperfect swipes.
         configuration: .init(
             fingerCount: 3,
             directionBias: 2.0,
@@ -69,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var enabledItem: NSMenuItem!
     private var enterItem: NSMenuItem!
     private var closeWindowItem: NSMenuItem!
+    private var undoItem: NSMenuItem!
+    private var redoItem: NSMenuItem!
     private var voiceInputItem: NSMenuItem!
     private var spotlightItem: NSMenuItem!
     private var launchAtLoginItem: NSMenuItem!
@@ -76,6 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var enabled = true
     private var enterEnabled = true
     private var closeWindowEnabled = true
+    private var undoEnabled = true
+    private var redoEnabled = true
     private var voiceInputEnabled = true
     private var spotlightEnabled = true
     private var lastActionAt = Date.distantPast
@@ -85,6 +89,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enabled = defaults.object(forKey: "enabled") as? Bool ?? true
         enterEnabled = defaults.object(forKey: "enterEnabled") as? Bool ?? true
         closeWindowEnabled = defaults.object(forKey: "closeWindowEnabled") as? Bool ?? true
+        undoEnabled = defaults.object(forKey: "undoEnabled") as? Bool ?? true
+        redoEnabled = defaults.object(forKey: "redoEnabled") as? Bool ?? true
         voiceInputEnabled = defaults.object(forKey: "voiceInputEnabled") as? Bool ?? true
         spotlightEnabled = defaults.object(forKey: "spotlightEnabled") as? Bool ?? true
 
@@ -127,6 +133,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         closeWindowItem.target = self
         menu.addItem(closeWindowItem)
+
+        undoItem = NSMenuItem(
+            title: "Three-finger swipe left: Undo (⌘Z)",
+            action: #selector(toggleUndoGesture),
+            keyEquivalent: ""
+        )
+        undoItem.target = self
+        menu.addItem(undoItem)
+
+        redoItem = NSMenuItem(
+            title: "Three-finger swipe right: Redo (⇧⌘Z)",
+            action: #selector(toggleRedoGesture),
+            keyEquivalent: ""
+        )
+        redoItem.target = self
+        menu.addItem(redoItem)
 
         voiceInputItem = NSMenuItem(
             title: "Four-finger tap: Voice input (Right Command)",
@@ -174,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 y: y,
                 timestamp: timestamp
             )
-            let closeWindowSwipeDirection = self.closeWindowSwipeDetector.ingest(
+            let threeFingerSwipeDirection = self.threeFingerSwipeDetector.ingest(
                 touchCount: touchCount,
                 firstTouchState: firstTouchState,
                 x: x,
@@ -199,8 +221,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if enterTapFired {
                 self.handleEnterTap()
             }
-            if closeWindowSwipeDirection == .down {
+            switch threeFingerSwipeDirection {
+            case .down:
                 self.handleCloseWindowSwipe()
+            case .left:
+                self.handleUndoSwipe()
+            case .right:
+                self.handleRedoSwipe()
+            default:
+                break
             }
             if voiceInputFired {
                 self.handleVoiceInputTap()
@@ -230,7 +259,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
         guard ensureAccessibility() else { return }
 
-        sendCommandW()
+        sendCommandKey(13)
+        lastActionAt = Date()
+    }
+
+    private func handleUndoSwipe() {
+        guard enabled, undoEnabled else { return }
+        guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
+        guard ensureAccessibility() else { return }
+
+        sendCommandKey(6)
+        lastActionAt = Date()
+    }
+
+    private func handleRedoSwipe() {
+        guard enabled, redoEnabled else { return }
+        guard Date().timeIntervalSince(lastActionAt) > 0.30 else { return }
+        guard ensureAccessibility() else { return }
+
+        sendCommandKey(6, extraFlags: .maskShift)
         lastActionAt = Date()
     }
 
@@ -272,15 +319,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         up.post(tap: .cghidEventTap)
     }
 
-    private func sendCommandW() {
-        // Hardware key code 13 is the W key on Apple ANSI keyboards.
+    private func sendCommandKey(_ keyCode: CGKeyCode, extraFlags: CGEventFlags = []) {
+        // Hardware key codes on Apple ANSI keyboards: 13 is W, 6 is Z.
         guard let source = CGEventSource(stateID: .hidSystemState),
-              let down = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: false) else {
+              let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
             return
         }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
+        let flags = CGEventFlags.maskCommand.union(extraFlags)
+        down.flags = flags
+        up.flags = flags
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
     }
@@ -389,6 +437,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enabledItem?.state = enabled ? .on : .off
         enterItem?.state = enterEnabled ? .on : .off
         closeWindowItem?.state = closeWindowEnabled ? .on : .off
+        undoItem?.state = undoEnabled ? .on : .off
+        redoItem?.state = redoEnabled ? .on : .off
         voiceInputItem?.state = voiceInputEnabled ? .on : .off
         spotlightItem?.state = spotlightEnabled ? .on : .off
         permissionItem?.title = AXIsProcessTrusted() ? "Accessibility: Granted" : "Accessibility: Required…"
@@ -402,7 +452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enabled.toggle()
         defaults.set(enabled, forKey: "enabled")
         enterTapDetector.reset()
-        closeWindowSwipeDetector.reset()
+        threeFingerSwipeDetector.reset()
         voiceInputDetector.reset()
         spotlightDetector.reset()
         refreshMenuState()
@@ -418,7 +468,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleCloseWindowGesture() {
         closeWindowEnabled.toggle()
         defaults.set(closeWindowEnabled, forKey: "closeWindowEnabled")
-        closeWindowSwipeDetector.reset()
+        threeFingerSwipeDetector.reset()
+        refreshMenuState()
+    }
+
+    @objc private func toggleUndoGesture() {
+        undoEnabled.toggle()
+        defaults.set(undoEnabled, forKey: "undoEnabled")
+        refreshMenuState()
+    }
+
+    @objc private func toggleRedoGesture() {
+        redoEnabled.toggle()
+        defaults.set(redoEnabled, forKey: "redoEnabled")
         refreshMenuState()
     }
 

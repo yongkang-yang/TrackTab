@@ -12,8 +12,9 @@ public struct SwipeDetector: Sendable {
         public var minDistance: Double
         public var maxDuration: TimeInterval
         /// How much larger the dominant-axis movement must be than the
-        /// cross-axis movement for the swipe to count as vertical (or
-        /// horizontal, depending on which axis is being measured).
+        /// cross-axis movement for the swipe to count as along that axis.
+        /// Movement that doesn't clear this on either axis is a diagonal
+        /// and isn't reported at all.
         public var directionBias: Double
         public var overshootTolerance: Int
         /// Whether a momentary non-contact reading on the sampled touch
@@ -42,6 +43,8 @@ public struct SwipeDetector: Sendable {
     public enum Direction: Sendable, Equatable {
         case up
         case down
+        case left
+        case right
     }
 
     private enum Phase: Sendable {
@@ -64,8 +67,9 @@ public struct SwipeDetector: Sendable {
     /// Consumes one raw multitouch frame and returns the swipe direction
     /// exactly once, when a valid swipe completes.
     ///
-    /// Coordinates follow MultitouchSupport's normalized space, where y
-    /// increases from bottom to top; a downward swipe therefore decreases y.
+    /// Coordinates follow MultitouchSupport's normalized space, where x
+    /// increases from left to right and y increases from bottom to top; a
+    /// downward swipe therefore decreases y.
     public mutating func ingest(
         touchCount: Int,
         firstTouchState: Int,
@@ -108,8 +112,13 @@ public struct SwipeDetector: Sendable {
             let dx = x - startX
             let dy = y - startY
             guard hypot(dx, dy) >= configuration.minDistance else { return nil }
-            guard abs(dy) >= abs(dx) * configuration.directionBias else { return nil }
-            return dy < 0 ? .down : .up
+            if abs(dy) >= abs(dx) * configuration.directionBias {
+                return dy < 0 ? .down : .up
+            }
+            if abs(dx) >= abs(dy) * configuration.directionBias {
+                return dx < 0 ? .left : .right
+            }
+            return nil
 
         case .cooldown:
             if touchCount == 0 {
