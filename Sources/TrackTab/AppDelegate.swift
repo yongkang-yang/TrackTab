@@ -28,7 +28,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Without this, a real 4-finger tap that drifts slightly while
         // held (natural over its ~0.5s duration) can pass through
         // touchCount 3 on lift-off and get misread as this swipe.
-        configuration: .init(fingerCount: 3, overshootTolerance: 0, requireContactWhileTracking: false)
+        // directionBias raised from the type's default (1.2, which accepts
+        // up to ~40° off straight-down) to 2.0 (~27°) so a clearly diagonal
+        // swipe doesn't count as "down". 3.0 (~18°) was tried and rejected
+        // too many real, slightly imperfect downward swipes.
+        configuration: .init(
+            fingerCount: 3,
+            directionBias: 2.0,
+            overshootTolerance: 0,
+            requireContactWhileTracking: false
+        )
     )
     private var voiceInputDetector = GestureDetector(
         // Same loosening as the 3-finger tap: more slack on timing/jitter,
