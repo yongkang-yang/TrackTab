@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/social-preview.png" alt="TrackTab — Custom Magic Trackpad gestures for macOS" width="100%">
+</p>
+
 # TrackTab
 
 A tiny macOS menu-bar utility that maps Magic Trackpad gestures to focused keyboard actions.
