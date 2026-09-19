@@ -98,3 +98,7 @@ All gestures are application-independent — none of them check which app is fro
 - `TrackTabCore`: testable gesture state machines (`GestureDetector` for taps, `SwipeDetector` for directional swipes), plus `GesturePresets`, the exact detector settings the app ships with
 - `TrackTab`: menu-bar UI, gesture routing, and keyboard-event synthesis
 - `TrackTabCoreTests`: per-detector tests, plus `GesturePresetsTests`, which runs the shipped settings side by side on the same touch frames to check each gesture fires exactly its own action
+
+## License
+
+TrackTab is licensed under the [GNU General Public License v3.0](LICENSE). Releases before the switch to GPL-3.0 remain available under the MIT License they were published with.
