@@ -3,14 +3,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="TrackTab"
-APP="$ROOT/$APP_NAME.app"
+BUILD_DIR="$ROOT/build"
+APP="$BUILD_DIR/$APP_NAME.app"
 
 cd "$ROOT"
 swift build -c release
 BIN_DIR="$(swift build -c release --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$BUILD_DIR" "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
@@ -51,4 +52,5 @@ PLIST
 
 echo
 echo "Built: $APP"
-echo "Move TrackTab.app to /Applications, open it, then grant Accessibility permission when macOS asks."
+echo "Move it to /Applications, open it, then grant Accessibility permission when macOS asks:"
+echo "  rm -rf /Applications/$APP_NAME.app && mv \"$APP\" /Applications/"

@@ -49,12 +49,13 @@ Two-finger tap and two-finger double-tap were deliberately avoided: they're alre
 ./build_app.sh
 ```
 
-This makes a release build, packages `TrackTab.app`, and ad-hoc signs it.
+This makes a release build, packages `build/TrackTab.app`, and ad-hoc signs it.
 
 Then:
 
 ```bash
-mv TrackTab.app /Applications/
+rm -rf /Applications/TrackTab.app
+mv build/TrackTab.app /Applications/
 open /Applications/TrackTab.app
 ```
 
