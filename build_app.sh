@@ -6,6 +6,14 @@ APP_NAME="TrackTab"
 BUILD_DIR="$ROOT/build"
 APP="$BUILD_DIR/$APP_NAME.app"
 
+INSTALL=1
+for arg in "$@"; do
+    case "$arg" in
+        --no-install) INSTALL=0 ;;
+        *) echo "usage: $0 [--no-install]" >&2; exit 2 ;;
+    esac
+done
+
 cd "$ROOT"
 swift build -c release
 BIN_DIR="$(swift build -c release --show-bin-path)"
@@ -71,5 +79,40 @@ fi
 
 echo
 echo "Built: $APP"
-echo "Move it to /Applications, open it, then grant Accessibility permission when macOS asks:"
-echo "  rm -rf /Applications/$APP_NAME.app && mv \"$APP\" /Applications/"
+
+# By default the build is installed over /Applications/TrackTab.app, the copy
+# that is actually launched: a bundle left only in the repo meant the running
+# app silently stayed older than every fix. --no-install skips it.
+if [ "$INSTALL" = 0 ]; then
+    exit 0
+fi
+
+INSTALL_DIR="/Applications/TrackTab.app"
+echo "==> Installing to $INSTALL_DIR"
+
+# Quit a running copy and wait for it to exit before replacing its bundle,
+# then relaunch only if something was running before.
+WAS_RUNNING=0
+if pgrep -xq "TrackTab"; then
+    WAS_RUNNING=1
+    osascript -e 'quit app id "com.yongkang.tracktab"' >/dev/null 2>&1 || true
+    for _ in $(seq 50); do
+        pgrep -xq "TrackTab" || break
+        sleep 0.1
+    done
+    if pgrep -xq "TrackTab"; then
+        echo "TrackTab did not quit; not installing" >&2
+        exit 1
+    fi
+fi
+
+rm -rf "$INSTALL_DIR"
+ditto "$APP" "$INSTALL_DIR"
+echo "    installed $INSTALL_DIR"
+
+if [ "$WAS_RUNNING" = 1 ]; then
+    open "$INSTALL_DIR"
+    echo "    relaunched"
+else
+    echo "  run:  open $INSTALL_DIR  (grant Accessibility when macOS asks)"
+fi

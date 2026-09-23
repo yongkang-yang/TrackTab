@@ -49,15 +49,7 @@ Two-finger tap and two-finger double-tap were deliberately avoided: they're alre
 ./build_app.sh
 ```
 
-This makes a release build, packages `build/TrackTab.app`, and ad-hoc signs it.
-
-Then:
-
-```bash
-rm -rf /Applications/TrackTab.app
-mv build/TrackTab.app /Applications/
-open /Applications/TrackTab.app
-```
+This makes a release build, packages and signs `build/TrackTab.app`, and installs it over `/Applications/TrackTab.app` — quitting and relaunching TrackTab if it was running. Pass `--no-install` to stop at `build/`.
 
 On first launch, grant **System Settings → Privacy & Security → Accessibility → TrackTab**.
 
