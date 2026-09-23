@@ -1,6 +1,7 @@
 #import "MultitouchBridge.h"
 
 #import <CoreFoundation/CoreFoundation.h>
+#import <IOKit/IOKitLib.h>
 #import <dlfcn.h>
 #import <math.h>
 
@@ -53,6 +54,14 @@ typedef void (*TTMTRegisterFrameFunction)(MTDeviceRef device, TTMTFrameCallback 
 typedef void (*TTMTRegisterFrameRefconFunction)(MTDeviceRef device,
                                                 TTMTFrameCallbackRefcon callback,
                                                 void *refcon);
+typedef void (*TTMTUnregisterFrameFunction)(MTDeviceRef device, TTMTFrameCallback callback);
+typedef void (*TTMTUnregisterFrameRefconFunction)(MTDeviceRef device, TTMTFrameCallbackRefcon callback);
+
+// Reconnecting a trackpad (Bluetooth drop, power cycle, USB replug) creates a
+// new MTDevice, so the device list captured at start goes stale. Wait briefly
+// after an IOKit add/remove so the new device is fully registered before
+// re-reading the list.
+static const NSTimeInterval TTDeviceRefreshDelay = 0.5;
 
 static __weak TTMultitouchStream *TTFallbackStream = nil;
 
@@ -64,9 +73,15 @@ static __weak TTMultitouchStream *TTFallbackStream = nil;
     TTMTDeviceStopFunction _stopDevice;
     TTMTRegisterFrameFunction _registerFrame;
     TTMTRegisterFrameRefconFunction _registerFrameRefcon;
+    TTMTUnregisterFrameFunction _unregisterFrame;
+    TTMTUnregisterFrameRefconFunction _unregisterFrameRefcon;
+    IONotificationPortRef _notificationPort;
+    io_iterator_t _addedIterator;
+    io_iterator_t _removedIterator;
     BOOL _running;
 }
 @property (nonatomic, copy, readwrite, nullable) NSString *lastErrorMessage;
+- (void)scheduleDeviceRefresh;
 @end
 
 @implementation TTMultitouchStream
@@ -126,6 +141,19 @@ static void TTFrameCallbackFallback(MTDeviceRef device,
     TTDeliverFrame(TTFallbackStream, touches, numTouches, timestamp);
 }
 
+static void TTDrainIterator(io_iterator_t iterator) {
+    io_object_t service;
+    while ((service = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
+        IOObjectRelease(service);
+    }
+}
+
+static void TTDevicesChanged(void *refcon, io_iterator_t iterator) {
+    TTDrainIterator(iterator);
+    TTMultitouchStream *stream = (__bridge TTMultitouchStream *)refcon;
+    [stream scheduleDeviceRefresh];
+}
+
 - (BOOL)start {
     if (_running) {
         return YES;
@@ -144,6 +172,8 @@ static void TTFrameCallbackFallback(MTDeviceRef device,
     _stopDevice = (TTMTDeviceStopFunction)dlsym(_frameworkHandle, "MTDeviceStop");
     _registerFrameRefcon = (TTMTRegisterFrameRefconFunction)dlsym(_frameworkHandle, "MTRegisterContactFrameCallbackWithRefcon");
     _registerFrame = (TTMTRegisterFrameFunction)dlsym(_frameworkHandle, "MTRegisterContactFrameCallback");
+    _unregisterFrameRefcon = (TTMTUnregisterFrameRefconFunction)dlsym(_frameworkHandle, "MTUnregisterContactFrameCallbackWithRefcon");
+    _unregisterFrame = (TTMTUnregisterFrameFunction)dlsym(_frameworkHandle, "MTUnregisterContactFrameCallback");
 
     if (_createList == NULL || _startDevice == NULL || _stopDevice == NULL ||
         (_registerFrameRefcon == NULL && _registerFrame == NULL)) {
@@ -152,15 +182,44 @@ static void TTFrameCallbackFallback(MTDeviceRef device,
         return NO;
     }
 
-    _devices = _createList();
-    if (_devices == NULL || CFArrayGetCount(_devices) == 0) {
-        self.lastErrorMessage = @"No multitouch trackpad was found.";
-        [self stop];
-        return NO;
-    }
-
     if (_registerFrameRefcon == NULL) {
         TTFallbackStream = self;
+    }
+
+    _running = YES;
+    [self startWatchingDevices];
+
+    // Keep running without a trackpad: the device watcher attaches one as
+    // soon as it connects.
+    if (![self attachDevices]) {
+        self.lastErrorMessage = @"No multitouch trackpad was found. TrackTab will start listening as soon as one connects.";
+        return NO;
+    }
+    return YES;
+}
+
+- (void)refreshDevices {
+    if (!_running) {
+        return;
+    }
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(refreshDevices) object:nil];
+    [self detachDevices];
+    [self attachDevices];
+}
+
+- (void)scheduleDeviceRefresh {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(refreshDevices) object:nil];
+    [self performSelector:@selector(refreshDevices) withObject:nil afterDelay:TTDeviceRefreshDelay];
+}
+
+- (BOOL)attachDevices {
+    _devices = _createList();
+    if (_devices == NULL || CFArrayGetCount(_devices) == 0) {
+        if (_devices != NULL) {
+            CFRelease(_devices);
+            _devices = NULL;
+        }
+        return NO;
     }
 
     CFIndex count = CFArrayGetCount(_devices);
@@ -173,20 +232,81 @@ static void TTFrameCallbackFallback(MTDeviceRef device,
         }
         _startDevice(device, 0);
     }
-
-    _running = YES;
     return YES;
 }
 
-- (void)stop {
-    if (_devices != NULL && _stopDevice != NULL) {
-        CFIndex count = CFArrayGetCount(_devices);
-        for (CFIndex index = 0; index < count; index++) {
-            MTDeviceRef device = (MTDeviceRef)CFArrayGetValueAtIndex(_devices, index);
-            _stopDevice(device);
+- (void)detachDevices {
+    if (_devices == NULL) {
+        return;
+    }
+
+    CFIndex count = CFArrayGetCount(_devices);
+    for (CFIndex index = 0; index < count; index++) {
+        MTDeviceRef device = (MTDeviceRef)CFArrayGetValueAtIndex(_devices, index);
+        if (_registerFrameRefcon != NULL && _unregisterFrameRefcon != NULL) {
+            _unregisterFrameRefcon(device, TTFrameCallbackWithRefcon);
+        } else if (_registerFrameRefcon == NULL && _unregisterFrame != NULL) {
+            _unregisterFrame(device, TTFrameCallbackFallback);
         }
-        CFRelease(_devices);
-        _devices = NULL;
+        _stopDevice(device);
+    }
+    CFRelease(_devices);
+    _devices = NULL;
+}
+
+- (void)startWatchingDevices {
+    _notificationPort = IONotificationPortCreate(kIOMainPortDefault);
+    if (_notificationPort == NULL) {
+        return;
+    }
+    CFRunLoopAddSource(CFRunLoopGetMain(),
+                       IONotificationPortGetRunLoopSource(_notificationPort),
+                       kCFRunLoopDefaultMode);
+
+    // Each IOServiceAddMatchingNotification call consumes one reference to
+    // its matching dictionary.
+    CFMutableDictionaryRef added = IOServiceMatching("AppleMultitouchDevice");
+    CFMutableDictionaryRef removed = IOServiceMatching("AppleMultitouchDevice");
+    if (added != NULL &&
+        IOServiceAddMatchingNotification(_notificationPort, kIOFirstMatchNotification, added,
+                                         TTDevicesChanged, (__bridge void *)self,
+                                         &_addedIterator) == KERN_SUCCESS) {
+        // Arm the notification; devices already present are picked up by
+        // the initial attach.
+        TTDrainIterator(_addedIterator);
+    }
+    if (removed != NULL &&
+        IOServiceAddMatchingNotification(_notificationPort, kIOTerminatedNotification, removed,
+                                         TTDevicesChanged, (__bridge void *)self,
+                                         &_removedIterator) == KERN_SUCCESS) {
+        TTDrainIterator(_removedIterator);
+    }
+}
+
+- (void)stopWatchingDevices {
+    if (_addedIterator != IO_OBJECT_NULL) {
+        IOObjectRelease(_addedIterator);
+        _addedIterator = IO_OBJECT_NULL;
+    }
+    if (_removedIterator != IO_OBJECT_NULL) {
+        IOObjectRelease(_removedIterator);
+        _removedIterator = IO_OBJECT_NULL;
+    }
+    if (_notificationPort != NULL) {
+        CFRunLoopRemoveSource(CFRunLoopGetMain(),
+                              IONotificationPortGetRunLoopSource(_notificationPort),
+                              kCFRunLoopDefaultMode);
+        IONotificationPortDestroy(_notificationPort);
+        _notificationPort = NULL;
+    }
+}
+
+- (void)stop {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(refreshDevices) object:nil];
+    [self stopWatchingDevices];
+
+    if (_stopDevice != NULL) {
+        [self detachDevices];
     }
 
     if (TTFallbackStream == self) {
@@ -203,6 +323,8 @@ static void TTFrameCallbackFallback(MTDeviceRef device,
     _stopDevice = NULL;
     _registerFrame = NULL;
     _registerFrameRefcon = NULL;
+    _unregisterFrame = NULL;
+    _unregisterFrameRefcon = NULL;
     _running = NO;
 }
 

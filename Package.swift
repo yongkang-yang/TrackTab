@@ -18,7 +18,8 @@ let package = Package(
                 .unsafeFlags(["-fobjc-arc", "-fblocks"])
             ],
             linkerSettings: [
-                .linkedFramework("Foundation")
+                .linkedFramework("Foundation"),
+                .linkedFramework("IOKit")
             ]
         ),
         .target(

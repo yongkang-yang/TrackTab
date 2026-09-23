@@ -46,10 +46,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpMenuBar()
         requestAccessibilityIfNeeded()
         startMultitouch()
+
+        // Trackpads can come back from sleep as new devices without an
+        // IOKit add/remove, so re-attach on every wake too.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         stream.stop()
+    }
+
+    @objc private func systemDidWake() {
+        stream.refreshDevices()
     }
 
     private func setUpMenuBar() {
