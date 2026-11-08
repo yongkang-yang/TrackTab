@@ -94,4 +94,4 @@ All gestures are application-independent — none of them check which app is fro
 
 ## License
 
-TrackTab is licensed under the [GNU General Public License v3.0](LICENSE).
+TrackTab is licensed under the [MIT License](LICENSE).
